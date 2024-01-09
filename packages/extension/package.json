@@ -20,9 +20,9 @@
   "dependencies": {
     "@babel/runtime": "^7.22.6",
     "@enkryptcom/extension-bridge": "workspace:^",
-    "@enkryptcom/hw-wallets": "workspace:^",
-    "@enkryptcom/keyring": "workspace:^",
-    "@enkryptcom/request": "workspace:^",
+    "@enkryptcom/hw-wallets": "0.0.2",
+    "@enkryptcom/keyring": "0.0.2",
+    "@enkryptcom/request": "0.0.1",
     "@enkryptcom/storage": "workspace:^",
     "@enkryptcom/swap": "workspace:^",
     "@enkryptcom/types": "workspace:^",
