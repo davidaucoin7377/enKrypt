@@ -64,8 +64,8 @@
     "vue-router": "4.2.4",
     "vue3-lottie": "^2.7.4",
     "vuedraggable": "^4.1.0",
-    "web3-eth": "^1.10.0",
-    "web3-utils": "^1.10.0",
+    "web3-eth": "^4.0.1",
+    "web3-utils": "^4.2.1",
     "yarn": "^1.22.19",
     "zxcvbn": "^4.4.2"
   },
