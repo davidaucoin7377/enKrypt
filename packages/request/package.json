@@ -23,7 +23,7 @@
     "node-fetch": "^2.6.12",
     "reconnecting-websocket": "^4.4.0",
     "uuid": "^9.0.0",
-    "ws": "^8.13.0"
+    "ws": "^8.17.1"
   },
   "devDependencies": {
     "@types/chai": "^4.3.5",
