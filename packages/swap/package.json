@@ -28,7 +28,7 @@
     "uuid": "^9.0.0",
     "web3-eth": "^1.10.0",
     "web3-utils": "^1.10.0",
-    "ws": "^8.13.0"
+    "ws": "^8.17.1"
   },
   "devDependencies": {
     "@types/chai": "^4.3.5",
