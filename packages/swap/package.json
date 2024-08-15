@@ -17,7 +17,7 @@
   },
   "dependencies": {
     "@enkryptcom/types": "workspace:^",
-    "@enkryptcom/utils": "workspace:^",
+    "@enkryptcom/utils": "0.0.3",
     "bignumber.js": "^9.1.1",
     "eventemitter3": "^5.0.1",
     "isomorphic-ws": "^5.0.0",
@@ -26,7 +26,7 @@
     "node-fetch": "^2.6.12",
     "reconnecting-websocket": "^4.4.0",
     "uuid": "^9.0.0",
-    "web3-eth": "^1.10.0",
+    "web3-eth": "^4.0.1",
     "web3-utils": "^1.10.0",
     "ws": "^8.13.0"
   },
