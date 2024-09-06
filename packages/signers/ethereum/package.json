@@ -19,7 +19,7 @@
   "dependencies": {
     "@enkryptcom/utils": "workspace:^",
     "bip39": "^3.1.0",
-    "chai": "^4.3.7",
+    "chai": "^4.3.10",
     "ethereum-cryptography": "^1.2.0",
     "ethereumjs-util": "^7.1.5",
     "hdkey": "^2.1.0",
