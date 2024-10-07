@@ -13,6 +13,7 @@
           :src="
             network.identicon(activity.isIncoming ? activity.from : activity.to)
           "
+          @error="imageLoadError"
         />
 
         <div class="network-activity__transaction-info-name">
@@ -26,6 +27,12 @@
                 6
               )
             }}
+            <span v-if="Number.isFinite(activity.crossChainId)">
+              <sup
+                class="network-activity__transaction-info-crosschain-superscript"
+                >⛓️{{ activity.crossChainId }}</sup
+              >
+            </span>
           </h4>
           <p>
             <span
@@ -38,12 +45,19 @@
               :date="activity.timestamp"
             />
             <span v-else-if="activity.timestamp !== 0">{{ date }}</span>
+            <span
+              v-if="network.subNetworks && activity.chainId !== undefined"
+              class="network-activity__transaction-info-chainid"
+              >{{ activity.isIncoming ? "on" : "from" }} chain
+              {{ activity.chainId }}</span
+            >
           </p>
         </div>
       </div>
 
       <div class="network-activity__transaction-amount">
         <h4>
+          {{ !activity.isIncoming ? "-" : "" }}
           {{
             $filters.formatFloatingPointValue(
               fromBase(activity.value, activity.token.decimals)
@@ -51,7 +65,9 @@
           }}
           <span>{{ activity.token.symbol }}</span>
         </h4>
-        <p>$ {{ $filters.formatFiatValue(getFiatValue).value }}</p>
+        <p v-show="getFiatValue.gt(0)">
+          $ {{ $filters.formatFiatValue(getFiatValue).value }}
+        </p>
       </div>
     </a>
   </section>
@@ -91,7 +107,11 @@
               fromBase(activity.value, activity.token.decimals)
             ).value
           }}
-          <span>{{ activity.token.symbol }}</span>
+          <span>{{
+            activity.token.symbol.length > 40
+              ? activity.token.symbol.substring(0, 40) + "..."
+              : activity.token.symbol
+          }}</span>
         </h4>
         <p>$ {{ $filters.formatFiatValue(getFiatValue).value }}</p>
       </div>
@@ -239,8 +259,16 @@ onMounted(() => {
         }
       }
 
+      &-crosschain-superscript {
+        color: @secondaryLabel;
+      }
+
       &-status {
         margin-right: 4px;
+      }
+
+      &-chainid {
+        margin-left: 4px;
       }
     }
 

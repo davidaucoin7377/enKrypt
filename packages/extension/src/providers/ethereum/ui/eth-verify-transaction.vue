@@ -97,7 +97,9 @@
           <p>Data Hex: {{ decodedTx?.dataHex || "0x" }}</p>
         </div>
       </div>
-
+      <p v-if="errorMsg != ''" class="provider-verify-transaction__error">
+        {{ errorMsg }}
+      </p>
       <transaction-fee-view
         :fees="gasCostValues"
         :show-fees="isOpenSelectFee"
@@ -119,7 +121,11 @@
     </template>
 
     <template #button-right>
-      <base-button title="Send" :click="approve" :disabled="isProcessing" />
+      <base-button
+        title="Send"
+        :click="approve"
+        :disabled="isProcessing || errorMsg != ''"
+      />
     </template>
   </common-popup>
 </template>
@@ -150,12 +156,15 @@ import { defaultGasCostVals } from "@/providers/common/libs/default-vals";
 import { EnkryptAccount } from "@enkryptcom/types";
 import { TransactionSigner } from "./libs/signer";
 import { Activity, ActivityStatus, ActivityType } from "@/types/activity";
-import { generateAddress } from "ethereumjs-util";
+import { generateAddress, bigIntToBytes } from "@ethereumjs/util";
 import ActivityState from "@/libs/activity-state";
-import { bigIntToBuffer, bigIntToHex, fromBase } from "@enkryptcom/utils";
+import { bigIntToHex, fromBase, bufferToHex } from "@enkryptcom/utils";
 import broadcastTx from "../libs/tx-broadcaster";
 import TokenSigs from "../libs/transaction/lists/tokenSigs";
 import AlertIcon from "@action/icons/send/alert-icon.vue";
+import { NetworkNames } from "@enkryptcom/types";
+import { trackSendEvents } from "@/libs/metrics";
+import { SendEventType } from "@/libs/metrics/types";
 
 const isProcessing = ref(false);
 const isOpenSelectFee = ref(false);
@@ -169,6 +178,7 @@ const approvalAmount = ref("");
 const network = ref<EvmNetwork>(DEFAULT_EVM_NETWORK);
 const marketdata = new MarketData();
 const gasCostValues = ref<GasFeeType>(defaultGasCostVals);
+const errorMsg = ref("");
 const account = ref<EnkryptAccount>({
   name: "",
   address: "",
@@ -182,7 +192,7 @@ const Options = ref<ProviderRequestOptions>({
   url: "",
   tabId: 0,
 });
-const selectedFee = ref<GasPriceTypes>(GasPriceTypes.REGULAR);
+const selectedFee = ref<GasPriceTypes>(GasPriceTypes.ECONOMY);
 
 defineExpose({ providerVerifyTransactionScrollRef });
 
@@ -191,6 +201,10 @@ onBeforeMount(async () => {
   network.value = (await getNetworkByName(
     Request.value.params![2]
   )) as EvmNetwork;
+  selectedFee.value =
+    network.value.name === NetworkNames.Ethereum || NetworkNames.Binance
+      ? GasPriceTypes.REGULAR
+      : GasPriceTypes.ECONOMY;
   account.value = Request.value.params![1] as EnkryptAccount;
   identicon.value = network.value.identicon(account.value.address);
   Options.value = options;
@@ -229,56 +243,64 @@ onBeforeMount(async () => {
     Request.value.params![0] as EthereumTransaction,
     web3
   );
-  await tx.getGasCosts().then(async (gasvals) => {
-    let nativeVal = "0";
-    if (network.value.coingeckoID) {
-      await marketdata
-        .getTokenValue("1", network.value.coingeckoID, "USD")
-        .then((val) => (nativeVal = val));
-    }
-    const getConvertedVal = (type: GasPriceTypes) =>
-      fromBase(gasvals[type], network.value.decimals);
+  await tx
+    .getGasCosts()
+    .then(async (gasvals) => {
+      let nativeVal = "0";
+      if (network.value.coingeckoID) {
+        await marketdata
+          .getTokenValue("1", network.value.coingeckoID, "USD")
+          .then((val) => (nativeVal = val));
+      }
+      const getConvertedVal = (type: GasPriceTypes) =>
+        fromBase(gasvals[type], network.value.decimals);
 
-    gasCostValues.value = {
-      [GasPriceTypes.ECONOMY]: {
-        nativeValue: getConvertedVal(GasPriceTypes.ECONOMY),
-        fiatValue: new BigNumber(getConvertedVal(GasPriceTypes.ECONOMY))
-          .times(nativeVal)
-          .toString(),
-        nativeSymbol: network.value.currencyName,
-        fiatSymbol: "USD",
-      },
-      [GasPriceTypes.REGULAR]: {
-        nativeValue: getConvertedVal(GasPriceTypes.REGULAR),
-        fiatValue: new BigNumber(getConvertedVal(GasPriceTypes.REGULAR))
-          .times(nativeVal)
-          .toString(),
-        nativeSymbol: network.value.currencyName,
-        fiatSymbol: "USD",
-      },
-      [GasPriceTypes.FAST]: {
-        nativeValue: getConvertedVal(GasPriceTypes.FAST),
-        fiatValue: new BigNumber(getConvertedVal(GasPriceTypes.FAST))
-          .times(nativeVal)
-          .toString(),
-        nativeSymbol: network.value.currencyName,
-        fiatSymbol: "USD",
-      },
-      [GasPriceTypes.FASTEST]: {
-        nativeValue: getConvertedVal(GasPriceTypes.FASTEST),
-        fiatValue: new BigNumber(getConvertedVal(GasPriceTypes.FASTEST))
-          .times(nativeVal)
-          .toString(),
-        nativeSymbol: network.value.currencyName,
-        fiatSymbol: "USD",
-      },
-    };
-    selectedFee.value = GasPriceTypes.REGULAR;
-  });
+      gasCostValues.value = {
+        [GasPriceTypes.ECONOMY]: {
+          nativeValue: getConvertedVal(GasPriceTypes.ECONOMY),
+          fiatValue: new BigNumber(getConvertedVal(GasPriceTypes.ECONOMY))
+            .times(nativeVal)
+            .toString(),
+          nativeSymbol: network.value.currencyName,
+          fiatSymbol: "USD",
+        },
+        [GasPriceTypes.REGULAR]: {
+          nativeValue: getConvertedVal(GasPriceTypes.REGULAR),
+          fiatValue: new BigNumber(getConvertedVal(GasPriceTypes.REGULAR))
+            .times(nativeVal)
+            .toString(),
+          nativeSymbol: network.value.currencyName,
+          fiatSymbol: "USD",
+        },
+        [GasPriceTypes.FAST]: {
+          nativeValue: getConvertedVal(GasPriceTypes.FAST),
+          fiatValue: new BigNumber(getConvertedVal(GasPriceTypes.FAST))
+            .times(nativeVal)
+            .toString(),
+          nativeSymbol: network.value.currencyName,
+          fiatSymbol: "USD",
+        },
+        [GasPriceTypes.FASTEST]: {
+          nativeValue: getConvertedVal(GasPriceTypes.FASTEST),
+          fiatValue: new BigNumber(getConvertedVal(GasPriceTypes.FASTEST))
+            .times(nativeVal)
+            .toString(),
+          nativeSymbol: network.value.currencyName,
+          fiatSymbol: "USD",
+        },
+      };
+      selectedFee.value = GasPriceTypes.REGULAR;
+    })
+    .catch((e) => {
+      errorMsg.value = e.message;
+    });
 });
 
 const approve = async () => {
   isProcessing.value = true;
+  trackSendEvents(SendEventType.SendAPIApprove, {
+    network: network.value.name,
+  });
   const { Request, Resolve } = await windowPromise;
   const web3 = new Web3Eth(network.value.node);
   const tx = new Transaction(
@@ -292,81 +314,98 @@ const approve = async () => {
         account: account.value,
         network: network.value,
         payload: finalizedTx,
-      }).then((tx) => {
-        const txActivity: Activity = {
-          from: account.value.address,
-          to: tx.to
-            ? tx.to.toString()
-            : `0x${generateAddress(
-                tx.getSenderAddress().toBuffer(),
-                bigIntToBuffer(tx.nonce)
-              ).toString("hex")}`,
-          isIncoming: tx.getSenderAddress().toString() === tx.to?.toString(),
-          network: network.value.name,
-          status: ActivityStatus.pending,
-          timestamp: new Date().getTime(),
-          token: {
-            decimals: decodedTx.value?.tokenDecimals || 18,
-            icon: decodedTx.value?.tokenImage || "",
-            name: decodedTx.value?.tokenName || "Unknown",
-            symbol: decodedTx.value?.tokenSymbol || "UKNWN",
-            price: decodedTx.value?.currentPriceUSD.toString() || "0",
-          },
-          type: ActivityType.transaction,
-          value: decodedTx.value?.tokenValue || "0x0",
-          transactionHash: "",
-        };
-        const onHash = (hash: string) => {
-          activityState
-            .addActivities(
-              [
-                {
-                  ...txActivity,
-                  ...{
-                    transactionHash: hash,
-                    nonce: bigIntToHex(finalizedTx.nonce),
-                  },
-                },
-              ],
-              {
-                address: txActivity.from,
-                network: network.value.name,
-              }
-            )
-            .then(() => {
-              Resolve.value({
-                result: JSON.stringify(hash),
-              });
+      })
+        .then((tx) => {
+          const txActivity: Activity = {
+            from: account.value.address,
+            to: tx.to
+              ? tx.to.toString()
+              : bufferToHex(
+                  generateAddress(
+                    tx.getSenderAddress().toBytes(),
+                    bigIntToBytes(tx.nonce)
+                  )
+                ),
+            isIncoming: tx.getSenderAddress().toString() === tx.to?.toString(),
+            network: network.value.name,
+            status: ActivityStatus.pending,
+            timestamp: new Date().getTime(),
+            token: {
+              decimals: decodedTx.value?.tokenDecimals || 18,
+              icon: decodedTx.value?.tokenImage || "",
+              name: decodedTx.value?.tokenName || "Unknown",
+              symbol: decodedTx.value?.tokenSymbol || "UKNWN",
+              price: decodedTx.value?.currentPriceUSD.toString() || "0",
+            },
+            type: ActivityType.transaction,
+            value: decodedTx.value?.tokenValue || "0x0",
+            transactionHash: "",
+          };
+          const onHash = (hash: string) => {
+            trackSendEvents(SendEventType.SendAPIComplete, {
+              network: network.value.name,
             });
-        };
-        broadcastTx("0x" + tx.serialize().toString("hex"), network.value.name)
-          .then(onHash)
-          .catch(() => {
-            web3
-              .sendSignedTransaction("0x" + tx.serialize().toString("hex"))
-              .on("transactionHash", onHash)
-              .on("error", (error) => {
-                txActivity.status = ActivityStatus.failed;
-                activityState
-                  .addActivities([txActivity], {
-                    address: txActivity.from,
-                    network: network.value.name,
-                  })
-                  .then(() => {
-                    Resolve.value({
-                      error: getCustomError(error.message),
-                    });
-                  });
+            activityState
+              .addActivities(
+                [
+                  {
+                    ...txActivity,
+                    ...{
+                      transactionHash: hash,
+                      nonce: bigIntToHex(finalizedTx.nonce),
+                    },
+                  },
+                ],
+                {
+                  address: txActivity.from,
+                  network: network.value.name,
+                }
+              )
+              .then(() => {
+                Resolve.value({
+                  result: JSON.stringify(hash),
+                });
               });
-          })
-          .catch((err) => {
-            Resolve.value(err);
+          };
+          broadcastTx(bufferToHex(tx.serialize()), network.value.name)
+            .then(onHash)
+            .catch(() => {
+              web3
+                .sendSignedTransaction(bufferToHex(tx.serialize()))
+                .on("transactionHash", onHash)
+                .on("error", (error) => {
+                  txActivity.status = ActivityStatus.failed;
+                  activityState
+                    .addActivities([txActivity], {
+                      address: txActivity.from,
+                      network: network.value.name,
+                    })
+                    .then(() => {
+                      trackSendEvents(SendEventType.SendAPIFailed, {
+                        network: network.value.name,
+                        error: error.message,
+                      });
+                      Resolve.value({
+                        error: getCustomError(error.message),
+                      });
+                    });
+                });
+            });
+        })
+        .catch((err) => {
+          trackSendEvents(SendEventType.SendAPIFailed, {
+            network: network.value.name,
+            error: err.error,
           });
-      });
+          Resolve.value(err);
+        });
     }
   );
 };
 const deny = async () => {
+  trackSendEvents(SendEventType.SendAPIDecline, {
+    network: network.value.name,
+  });
   const { Resolve } = await windowPromise;
   Resolve.value({
     error: getError(ErrorCodes.userRejected),

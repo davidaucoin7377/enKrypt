@@ -7,7 +7,8 @@ import BTCNetworks from "../networks";
 import DomainState from "@/libs/domain-state";
 import BitcoinProvider from "..";
 import { BitcoinNetworks } from "../types";
-import { addNetworkSelectMetrics } from "@/libs/metrics";
+import { trackNetworkSelected } from "@/libs/metrics";
+import { NetworkChangeEvents } from "@/libs/metrics/types";
 const method: MiddlewareFunction = function (
   this: BitcoinProvider,
   payload: ProviderRPCRequest,
@@ -19,16 +20,19 @@ const method: MiddlewareFunction = function (
     if (
       !payload.params ||
       payload.params.length < 1 ||
-      !Object.values(BitcoinNetworks).includes(payload.params[0])
+      !Object.keys(BitcoinNetworks).includes(payload.params[0])
     ) {
       return res(getCustomError("btc_switchNetwork: invalid params"));
     }
+    const internalName =
+      BitcoinNetworks[payload.params![0] as keyof typeof BitcoinNetworks];
     const allNetworks = Object.values(BTCNetworks);
-    const validNetwork = allNetworks.find(
-      (net) => net.name === payload.params![0]
-    );
+    const validNetwork = allNetworks.find((net) => net.name === internalName);
     if (validNetwork) {
-      addNetworkSelectMetrics(validNetwork.provider, validNetwork.name, 1);
+      trackNetworkSelected(NetworkChangeEvents.NetworkChangeAPI, {
+        provider: validNetwork.provider,
+        network: validNetwork.name,
+      });
       sendToBackgroundFromBackground({
         message: JSON.stringify({
           method: InternalMethods.changeNetwork,

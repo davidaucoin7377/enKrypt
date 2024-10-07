@@ -1,4 +1,4 @@
-import { NFTCollection, NFTItem } from "@/types/nft";
+import { NFTCollection, NFTItem, NFTType } from "@/types/nft";
 import { NodeType } from "@/types/provider";
 import cacheFetch from "../cache-fetch";
 import { NetworkNames } from "@enkryptcom/types";
@@ -18,13 +18,26 @@ export default async (
     [NetworkNames.Optimism]: "optimism",
     [NetworkNames.Binance]: "bsc",
     [NetworkNames.Arbitrum]: "arbitrum",
+    [NetworkNames.ArbitrumNova]: "arbitrum-nova",
     [NetworkNames.Gnosis]: "gnosis",
     [NetworkNames.Avalanche]: "avalanche",
+    [NetworkNames.Matic]: "polygon",
     [NetworkNames.MaticZK]: "polygon-zkevm",
     [NetworkNames.ZkSync]: "zksync-era",
     [NetworkNames.ZkSyncGoerli]: "zksync-era-testnet",
-    [NetworkNames.Goerli]: "ethereum-goerli",
     [NetworkNames.Base]: "base",
+    [NetworkNames.Blast]: "blast",
+    [NetworkNames.ImmutableZkevm]: "immutable-zkevm",
+    [NetworkNames.Rari]: "rari",
+    [NetworkNames.Forma]: "forma",
+    [NetworkNames.Godwoken]: "godwoken",
+    [NetworkNames.Linea]: "linea",
+    [NetworkNames.MantaPacific]: "manta",
+    [NetworkNames.Mode]: "mode",
+    [NetworkNames.OpBNB]: "opbnb",
+    [NetworkNames.Palm]: "palm",
+    [NetworkNames.ProofOfPlayApex]: "proof-of-play",
+    [NetworkNames.Scroll]: "scroll",
   };
   if (!Object.keys(supportedNetworks).includes(network.name))
     throw new Error("Simplehash: network not supported");
@@ -32,9 +45,9 @@ export default async (
   const fetchAll = (continuation?: string): Promise<void> => {
     const query = continuation
       ? continuation
-      : `${SH_ENDPOINT}owners?chains=${
+      : `${SH_ENDPOINT}owners_v2?chains=${
           supportedNetworks[network.name as keyof typeof supportedNetworks]
-        }&wallet_addresses=${address}`;
+        }&wallet_addresses=${address}&filters=spam_score__lte=75`;
     return cacheFetch(
       {
         url: query,
@@ -50,9 +63,10 @@ export default async (
   if (!allItems || !allItems.length) return [];
   const collections: Record<string, NFTCollection> = {};
   allItems.forEach((item) => {
+    if (!item.image_url && !item.previews.image_medium_url) return;
     if (
-      (!item.image_url && !item.previews.image_medium_url) ||
-      !item.collection.image_url
+      item.contract.type !== NFTType.ERC1155 &&
+      item.contract.type !== NFTType.ERC721
     )
       return;
     if (collections[item.contract_address]) {
@@ -64,13 +78,16 @@ export default async (
         url:
           item.external_url ||
           getExternalURL(network, item.contract_address, item.token_id),
+        type: item.contract.type,
       };
       collections[item.contract_address].items.push(tItem);
     } else {
       const ret: NFTCollection = {
         name: item.collection.name,
         description: item.collection.description,
-        image: item.collection.image_url,
+        image:
+          item.collection.image_url ||
+          require("@action/assets/common/not-found.jpg"),
         contract: item.contract_address,
         items: [
           {
@@ -81,6 +98,7 @@ export default async (
             url:
               item.external_url ||
               getExternalURL(network, item.contract_address, item.token_id),
+            type: item.contract.type,
           },
         ],
       };

@@ -17,6 +17,14 @@ const defaultSettings = {
   substrate: {
     injectPolkadotjs: false,
   },
+  btc: {
+    injectUnisat: false,
+  },
+  enkrypt: {
+    installedTimestamp: 0,
+    randomUserID: "",
+    isMetricsEnabled: true,
+  },
   manifestVersion: 3,
 };
 

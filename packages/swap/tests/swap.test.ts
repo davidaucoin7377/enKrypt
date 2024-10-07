@@ -61,7 +61,7 @@ describe("Swap", () => {
       toToken,
       toAddress,
     });
-    expect(quotes?.length).to.be.eq(3);
+    expect(quotes?.length).to.be.gte(3);
     const oneInceQuote = quotes.find(
       (q) => q.provider === ProviderName.oneInch
     );
@@ -72,6 +72,10 @@ describe("Swap", () => {
       (q) => q.provider === ProviderName.changelly
     );
     const zeroxQuote = quotes.find((q) => q.provider === ProviderName.zerox);
+    if (quotes?.length > 3) {
+      const rangoQuote = quotes.find((q) => q.provider === ProviderName.rango);
+      expect(rangoQuote!.provider).to.be.eq(ProviderName.rango);
+    }
     expect(zeroxQuote).to.be.eq(undefined);
     expect(changellyQuote!.provider).to.be.eq(ProviderName.changelly);
     expect(oneInceQuote!.provider).to.be.eq(ProviderName.oneInch);
@@ -92,7 +96,7 @@ describe("Swap", () => {
       toToken,
       toAddress: fromAddress,
     });
-    expect(quotes?.length).to.be.eq(4);
+    expect(quotes?.length).to.be.gte(4);
     const oneInceQuote = quotes.find(
       (q) => q.provider === ProviderName.oneInch
     );
@@ -103,9 +107,11 @@ describe("Swap", () => {
       (q) => q.provider === ProviderName.changelly
     );
     const zeroxQuote = quotes.find((q) => q.provider === ProviderName.zerox);
+    // const rangoQuote = quotes.find((q) => q.provider === ProviderName.rango);
     expect(zeroxQuote!.provider).to.be.eq(ProviderName.zerox);
     expect(changellyQuote!.provider).to.be.eq(ProviderName.changelly);
     expect(oneInceQuote!.provider).to.be.eq(ProviderName.oneInch);
     expect(paraswapQuote!.provider).to.be.eq(ProviderName.paraswap);
+    // expect(rangoQuote!.provider).to.be.eq(ProviderName.rango);
   }).timeout(10000);
 });

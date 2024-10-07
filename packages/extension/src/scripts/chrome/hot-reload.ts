@@ -1,29 +1,28 @@
 import browser from "webextension-polyfill";
-import { keccakFromString } from "ethereumjs-util";
 const filesToMonitor = {
   content: {
     path: "scripts/contentscript.js",
-    hash: "",
+    length: 0,
   },
   inject: {
     path: "scripts/inject.js",
-    hash: "",
+    length: 0,
   },
   background: {
     path: "scripts/background.js",
-    hash: "",
+    length: 0,
   },
   action: {
     path: "action.html",
-    hash: "",
+    length: 0,
   },
   index: {
     path: "index.html",
-    hash: "",
+    length: 0,
   },
   manifest: {
     path: "manifest.json",
-    hash: "",
+    length: 0,
   },
 };
 const checkFilesChanged = async () => {
@@ -33,10 +32,10 @@ const checkFilesChanged = async () => {
     await fetch(exturl)
       .then((res) => res.text())
       .then((content) => {
-        const hash = keccakFromString(content).toString("hex");
-        if (value.hash !== hash) {
+        const length = content.length;
+        if (value.length !== length) {
           filesChanged = true;
-          value.hash = hash;
+          value.length = length;
         }
       });
   }

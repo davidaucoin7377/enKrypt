@@ -21,6 +21,7 @@ import { getKnownNetworkTokens } from "./token-lists";
 import { CoingeckoPlatform, NetworkNames } from "@enkryptcom/types";
 import { NATIVE_TOKEN_ADDRESS } from "../common";
 import getTomoBalances from "./tomochain";
+import getSolBalances from "./solanachain";
 import { CoinGeckoTokenMarket } from "@/libs/market-data/types";
 
 const API_ENPOINT = "https://tokenbalance.mewapi.io/";
@@ -75,6 +76,10 @@ const supportedNetworks: Record<SupportedNetworkNames, SupportedNetwork> = {
     tbName: "arb",
     cgPlatform: CoingeckoPlatform.Arbitrum,
   },
+  [NetworkNames.ArbitrumNova]: {
+    tbName: "nova",
+    cgPlatform: CoingeckoPlatform.ArbitrumNova,
+  },
   [NetworkNames.Gnosis]: {
     tbName: "xdai",
     cgPlatform: CoingeckoPlatform.Gnosis,
@@ -111,19 +116,87 @@ const supportedNetworks: Record<SupportedNetworkNames, SupportedNetwork> = {
     tbName: "",
     cgPlatform: CoingeckoPlatform.TomoChain,
   },
+  [NetworkNames.Shibarium]: {
+    tbName: "shib",
+    cgPlatform: CoingeckoPlatform.Shibarium,
+  },
+  [NetworkNames.Rollux]: {
+    tbName: "rollux",
+    cgPlatform: CoingeckoPlatform.Rollux,
+  },
+  [NetworkNames.Telos]: {
+    tbName: "tlos",
+    cgPlatform: CoingeckoPlatform.Telos,
+  },
+  [NetworkNames.Blast]: {
+    tbName: "blast",
+    cgPlatform: CoingeckoPlatform.Blast,
+  },
+  [NetworkNames.Sanko]: {
+    tbName: "sanko",
+    cgPlatform: CoingeckoPlatform.Sanko,
+  },
+  [NetworkNames.Degen]: {
+    tbName: "degen",
+    cgPlatform: CoingeckoPlatform.Degen,
+  },
+  [NetworkNames.XLayer]: {
+    tbName: "xlayer",
+    cgPlatform: CoingeckoPlatform.XLayer,
+  },
+  [NetworkNames.ProofOfPlayApex]: {
+    tbName: "apex",
+    cgPlatform: undefined,
+  },
+  [NetworkNames.Godwoken]: {
+    tbName: "ckb",
+    cgPlatform: CoingeckoPlatform.Godwoken,
+  },
+  [NetworkNames.Linea]: {
+    tbName: "linea",
+    cgPlatform: CoingeckoPlatform.Linea,
+  },
+  [NetworkNames.MantaPacific]: {
+    tbName: "manta",
+    cgPlatform: CoingeckoPlatform.MantaPacific,
+  },
+  [NetworkNames.Mode]: {
+    tbName: "mode",
+    cgPlatform: CoingeckoPlatform.Mode,
+  },
+  [NetworkNames.OpBNB]: {
+    tbName: "opbnb",
+    cgPlatform: CoingeckoPlatform.OpBNB,
+  },
+  [NetworkNames.Scroll]: {
+    tbName: "scrl",
+    cgPlatform: CoingeckoPlatform.Scroll,
+  },
+  [NetworkNames.Rari]: {
+    tbName: "rari",
+    cgPlatform: undefined,
+  },
+  [NetworkNames.Solana]: {
+    tbName: "",
+    cgPlatform: CoingeckoPlatform.Solana,
+  },
 };
 
 const getTokens = (
-  chain: SupportedNetworkNames,
+  network: BaseNetwork,
   address: string
 ): Promise<TokenBalance[]> => {
+  const chain = network.name as SupportedNetworkNames;
   if (chain === NetworkNames.TomoChain) {
     return getTomoBalances(chain, address);
+  } else if (chain === NetworkNames.Solana) {
+    return getSolBalances(network, address);
   }
   let url = "";
   if (chain === NetworkNames.Ethereum || chain === NetworkNames.Binance)
-    url = `${API_ENPOINT}${supportedNetworks[chain].tbName}?address=${address}`;
-  else url = `${API_ENPOINT2}${supportedNetworks[chain].tbName}/${address}`;
+    url = `${API_ENPOINT}${supportedNetworks[chain].tbName}?address=${address}&platform=enkrypt&type=internal`;
+  else
+    url = `${API_ENPOINT2}${supportedNetworks[chain].tbName}/${address}?platform=enkrypt&type=internal`;
   return fetch(url)
     .then((res) => res.json())
     .then((json) => {
@@ -153,7 +226,7 @@ export default (
   if (!Object.keys(supportedNetworks).includes(network.name))
     throw new Error("TOKENBALANCE-MEW: network not supported");
   const networkName = network.name as SupportedNetworkNames;
-  return getTokens(networkName, address).then(async (tokens) => {
+  return getTokens(network, address).then(async (tokens) => {
     const balances: Record<string, TokenBalance> = tokens.reduce(
       (obj, cur) => ({ ...obj, [cur.contract]: cur }),
       {}
@@ -199,11 +272,10 @@ export default (
     const tokenInfo: Record<string, CGToken> = await getKnownNetworkTokens(
       network.name
     );
-
     tokenInfo[NATIVE_TOKEN_ADDRESS] = {
       chainId: (network as EvmNetwork).chainID,
       name: network.name_long,
-      decimals: 18,
+      decimals: network.decimals,
       address: NATIVE_TOKEN_ADDRESS,
       logoURI: network.icon,
       symbol: network.currencyName,
@@ -217,9 +289,8 @@ export default (
           balances[address].balance,
           tokenInfo[address].decimals
         );
-        const usdBalance = new BigNumber(userBalance).times(
-          market.current_price
-        );
+        const currentPrice = market.current_price ?? 0;
+        const usdBalance = new BigNumber(userBalance).times(currentPrice);
         const asset: AssetsType = {
           balance: toBN(balances[address].balance).toString(),
           balancef: formatFloatingPointValue(userBalance).value,
@@ -228,8 +299,8 @@ export default (
           icon: market.image,
           name: market.name,
           symbol: market.symbol,
-          value: market.current_price.toString(),
-          valuef: formatFiatValue(market.current_price.toString()).value,
+          value: currentPrice.toString(),
+          valuef: formatFiatValue(currentPrice.toString()).value,
           contract: address,
           decimals: tokenInfo[address].decimals,
           sparkline: new Sparkline(market.sparkline_in_7d.price, 25).dataValues,
@@ -254,6 +325,7 @@ export default (
       const promises = unknownTokens.map((t) => api.getTokenInfo(t));
       await Promise.all(promises).then((tokenMeta) => {
         tokenMeta.forEach((tInfo, idx) => {
+          if (tInfo.symbol === "UNKNWN") return;
           const userBalance = fromBase(
             balances[unknownTokens[idx]].balance,
             tInfo.decimals

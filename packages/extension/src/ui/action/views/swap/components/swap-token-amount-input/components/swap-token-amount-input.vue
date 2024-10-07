@@ -2,13 +2,14 @@
   <input
     ref="swapAmountInput"
     v-model="textValue"
-    type="number"
+    type="text"
     :placeholder="placeholder"
     autocomplete="off"
     :class="`swap-token-amount-input
   ${!error || 'swap-token-amount-error'}`"
     @focus="changeFocus"
     @blur="changeFocus"
+    @keypress="onlyNumber"
   />
 </template>
 
@@ -59,11 +60,21 @@ onMounted(() => {
 const emit = defineEmits(["update:value"]);
 const textValue = computed({
   get: () => props.value,
-  set: (value) => emit("update:value", value.toString()),
+  set: (value) => {
+    let fValue = value.toString();
+    if (fValue === ".") fValue = "0.";
+    emit("update:value", fValue);
+  },
 });
 const changeFocus = () => {
   isFocus.value = !isFocus.value;
   props.changeFocus(isFocus.value);
+};
+const onlyNumber = ($event: KeyboardEvent) => {
+  const keyCode = $event.keyCode ? $event.keyCode : $event.which;
+  if ((keyCode < 48 || keyCode > 57) && keyCode !== 46) {
+    $event.preventDefault();
+  }
 };
 </script>
 

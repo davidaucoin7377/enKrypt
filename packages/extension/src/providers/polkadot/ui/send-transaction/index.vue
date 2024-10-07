@@ -21,10 +21,9 @@
 
       <send-from-contacts-list
         :show-accounts="isOpenSelectContactFrom"
-        :accounts="accountInfo.activeAccounts"
+        :account-info="accountInfo"
         :address="addressFrom"
         :network="network"
-        :identicon="network.identicon"
         @selected:account="selectAccountFrom"
         @close="toggleSelectContactFrom"
       />
@@ -39,9 +38,9 @@
 
       <send-contacts-list
         :show-accounts="isOpenSelectContactTo"
-        :accounts="accountInfo.activeAccounts"
-        :network="network"
+        :account-info="accountInfo"
         :address="addressTo"
+        :network="network"
         @selected:account="selectAccountTo"
         @update:paste-from-clipboard="addressInputTo.pasteFromClipboard()"
         @close="toggleSelectContactTo"
@@ -63,6 +62,7 @@
 
       <send-input-amount
         :amount="amount"
+        :show-max="true"
         :fiat-value="selectedAsset.price"
         :has-enough-balance="hasEnough"
         @update:input-amount="inputAmount"
@@ -71,10 +71,19 @@
 
       <send-fee-select
         v-if="!edWarn"
-        :fee="fee ?? { nativeSymbol: props.network.name }"
+        :fee="fee ?? { nativeSymbol: props.network.currencyName }"
       />
 
-      <send-alert v-if="edWarn" />
+      <send-alert
+        v-if="edWarn"
+        :alert-type="AlertType.ED_WARN"
+        :existential-balance="existentialBalance"
+      ></send-alert>
+      <send-alert
+        v-if="!destinationBalanceCheck"
+        :alert-type="AlertType.DESTINATION_BALANCE"
+        :existential-balance="existentialBalance"
+      ></send-alert>
 
       <div class="send-transaction__buttons">
         <div class="send-transaction__buttons-cancel">
@@ -98,11 +107,11 @@ import { useRoute, useRouter } from "vue-router";
 import { debounce } from "lodash";
 import CloseIcon from "@action/icons/common/close-icon.vue";
 import SendAddressInput from "./components/send-address-input.vue";
-import SendContactsList from "./components/send-contacts-list.vue";
-import SendFromContactsList from "./components/send-from-contacts-list.vue";
+import SendContactsList from "@/providers/common/ui/send-transaction/send-contacts-list.vue";
+import SendFromContactsList from "@/providers/common/ui/send-transaction/send-from-contacts-list.vue";
 import SendTokenSelect from "./components/send-token-select.vue";
 import AssetsSelectList from "@action/views/assets-select-list/index.vue";
-import SendInputAmount from "./components/send-input-amount.vue";
+import SendInputAmount from "@/providers/common/ui/send-transaction/send-input-amount.vue";
 import SendFeeSelect from "./components/send-fee-select.vue";
 import SendAlert from "./components/send-alert.vue";
 import BaseButton from "@action/components/base-button/index.vue";
@@ -115,7 +124,7 @@ import { toBN } from "web3-utils";
 import { formatFloatingPointValue } from "@/libs/utils/number-formatter";
 import { fromBase, toBase, isValidDecimals } from "@enkryptcom/utils";
 import BigNumber from "bignumber.js";
-import { VerifyTransactionParams } from "../types";
+import { AlertType, VerifyTransactionParams } from "../types";
 import { routes as RouterNames } from "@/ui/action/router";
 import { SendOptions } from "@/types/base-token";
 import { SubstrateToken } from "../../types/substrate-token";
@@ -126,6 +135,9 @@ import { ProviderName } from "@/types/provider";
 import PublicKeyRing from "@/libs/keyring/public-keyring";
 import { polkadotEncodeAddress } from "@enkryptcom/utils";
 import { GenericNameResolver, CoinType } from "@/libs/name-resolver";
+import { trackSendEvents } from "@/libs/metrics";
+import { SendEventType } from "@/libs/metrics/types";
+import { BNType } from "@/providers/common/types";
 
 const props = defineProps({
   network: {
@@ -163,8 +175,9 @@ const selectedAsset = ref<SubstrateToken | Partial<SubstrateToken>>(
   })
 );
 const hasEnough = ref(false);
+const destinationHasEnough = ref(true);
 const sendMax = ref(false);
-
+const existentialBalance = ref("0");
 const selected: string = route.params.id as string;
 const isLoadingAssets = ref(true);
 
@@ -212,11 +225,17 @@ const isAddress = computed(() => {
 
 onMounted(() => {
   isLoadingAssets.value = true;
+  existentialBalance.value = `${fromBase(
+    props.network.existentialDeposit!.toString(),
+    props.network.decimals
+  )} ${props.network.currencyName}`;
+  trackSendEvents(SendEventType.SendOpen, { network: props.network.name });
   fetchTokens();
 });
 
 const validateFields = async () => {
   if (selectedAsset.value && isAddress.value) {
+    destinationHasEnough.value = true;
     if (!isValidDecimals(amount.value || "0", selectedAsset.value.decimals!)) {
       hasEnough.value = false;
       return;
@@ -235,7 +254,17 @@ const validateFields = async () => {
     const sendOptions: SendOptions | undefined = sendMax.value
       ? { type: "all" }
       : undefined;
-
+    const addressToBalance = await api.query.system
+      .account(addressTo.value)
+      .then((res: any) => {
+        const {
+          data: { free: currentFree },
+        } = res;
+        return currentFree as BNType;
+      });
+    if (addressToBalance.lt(props.network.existentialDeposit!)) {
+      destinationHasEnough.value = false;
+    }
     const tx = await selectedAsset.value.send!(
       api,
       addressTo.value,
@@ -259,13 +288,23 @@ const validateFields = async () => {
         );
       }
     }
-    if (rawAmount.ltn(0) || rawAmount.add(rawFee).gt(rawBalance)) {
+    const nativeAsset = accountAssets.value[0];
+    if (rawAmount.ltn(0)) {
+      hasEnough.value = false;
+    } else if (
+      nativeAsset.symbol === selectedAsset.value.symbol &&
+      rawAmount.add(rawFee).gt(rawBalance)
+    ) {
+      hasEnough.value = false;
+    } else if (
+      nativeAsset.symbol !== selectedAsset.value.symbol &&
+      rawAmount.gt(rawBalance)
+    ) {
       hasEnough.value = false;
     } else {
       hasEnough.value = true;
     }
 
-    const nativeAsset = accountAssets.value[0];
     const txFeeHuman = fromBase(
       partialFee?.toString() ?? "",
       nativeAsset.decimals!
@@ -316,6 +355,9 @@ const fetchTokens = async () => {
 };
 
 const close = () => {
+  trackSendEvents(SendEventType.SendDecline, {
+    network: props.network.name,
+  });
   router.go(-1);
 };
 
@@ -364,9 +406,13 @@ const selectToken = (token: SubstrateToken | Partial<SubstrateToken>) => {
   isOpenSelectToken.value = false;
 };
 
-const inputAmount = (number: string | undefined) => {
+const inputAmount = (inputAmount: string) => {
+  if (inputAmount === "") {
+    inputAmount = "0";
+  }
+  const inputAmountBn = new BigNumber(inputAmount);
   sendMax.value = false;
-  amount.value = number ? (parseFloat(number) < 0 ? "0" : number) : number;
+  amount.value = inputAmountBn.lt(0) ? "0" : inputAmount;
   validateFields();
 };
 
@@ -381,12 +427,7 @@ const sendButtonTitle = computed(() => {
   return title;
 });
 
-const setSendMax = (max: boolean) => {
-  if (!max) {
-    sendMax.value = false;
-    return;
-  }
-
+const setSendMax = () => {
   if (selectedAsset.value) {
     const humanBalance = fromBase(
       selectedAsset.value.balance!,
@@ -398,25 +439,47 @@ const setSendMax = (max: boolean) => {
   }
 };
 
+const destinationBalanceCheck = computed(() => {
+  if (
+    selectedAsset.value &&
+    accountAssets.value &&
+    accountAssets.value.length
+  ) {
+    if (selectedAsset.value.symbol !== accountAssets.value[0].symbol)
+      return destinationHasEnough.value;
+    else {
+      const rawAmount = toBN(
+        toBase(
+          amount.value?.toString() ?? "0",
+          selectedAsset.value.decimals ?? 0
+        )
+      );
+      return (
+        destinationHasEnough.value ||
+        rawAmount.gte(props.network.existentialDeposit!)
+      );
+    }
+  }
+  return true;
+});
 const isDisabled = computed(() => {
   let isDisabled = true;
 
   let addressIsValid = false;
-
   try {
     props.network.displayAddress(addressTo.value);
     addressIsValid = true;
   } catch {
     addressIsValid = false;
   }
-
   if (
     amount.value !== undefined &&
     amount.value !== "" &&
     hasEnough.value &&
     addressIsValid &&
     !edWarn.value &&
-    edWarn.value !== undefined
+    edWarn.value !== undefined &&
+    destinationBalanceCheck.value
   )
     isDisabled = false;
   return isDisabled;
@@ -489,6 +552,7 @@ const sendAction = async () => {
       height: 600,
       width: 460,
     });
+    window.close();
   } else {
     router.push(routedRoute);
   }
@@ -544,10 +608,9 @@ const sendAction = async () => {
   }
 
   &__buttons {
-    position: absolute;
     left: 0;
     bottom: 0;
-    padding: 0 32px 32px 32px;
+    padding: 5px 32px 32px 32px;
     display: flex;
     justify-content: space-between;
     align-items: center;

@@ -1,6 +1,9 @@
 import { SignerType } from "@enkryptcom/types";
 import { NetworkInfo, NetworkType, SupportedNetworkName } from "../types";
 
+/**
+ * Sometimes you can get decimals and token info from here `https://raw.githubusercontent.com/MyEtherWallet/ethereum-lists/master/dist/master-file.json`
+ */
 const NetworkDetails: Record<SupportedNetworkName, NetworkInfo> = {
   [SupportedNetworkName.Bitcoin]: {
     id: SupportedNetworkName.Bitcoin,
@@ -50,24 +53,48 @@ const NetworkDetails: Record<SupportedNetworkName, NetworkInfo> = {
     signerType: [SignerType.secp256k1],
     type: NetworkType.EVM,
   },
+  [SupportedNetworkName.MaticZK]: {
+    id: SupportedNetworkName.MaticZK,
+    cgId: "matic-network",
+    decimals: 18,
+    logoURI:
+      "https://tokens.1inch.io/0x7d1afa7b718fb893db30a3abc0cfc608aacfebb0.png",
+    name: "Polygon ZK",
+    symbol: "MATIC",
+    rank: 4,
+    signerType: [SignerType.secp256k1],
+    type: NetworkType.EVM,
+  },
   [SupportedNetworkName.Optimism]: {
     id: SupportedNetworkName.Optimism,
     cgId: "optimism",
     decimals: 18,
     logoURI:
-      "https://tokens.1inch.io/0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee.png",
+      "https://assets.coingecko.com/coins/images/25244/large/Optimism.png",
     name: "Optimism",
     symbol: "ETH",
     rank: 5,
     signerType: [SignerType.secp256k1],
     type: NetworkType.EVM,
   },
+  [SupportedNetworkName.Base]: {
+    id: SupportedNetworkName.Base,
+    cgId: "ethereum",
+    decimals: 18,
+    logoURI:
+      "https://assets.coingecko.com/asset_platforms/images/131/large/base.jpeg",
+    name: "Base",
+    signerType: [SignerType.secp256k1],
+    type: NetworkType.EVM,
+    rank: 6,
+    symbol: "ETH",
+  },
   [SupportedNetworkName.Arbitrum]: {
     id: SupportedNetworkName.Arbitrum,
     cgId: "ethereum",
     decimals: 18,
     logoURI:
-      "https://tokens.1inch.io/0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee.png",
+      "https://assets.coingecko.com/coins/images/16547/large/photo_2023-03-29_21.47.00.jpeg",
     name: "Arbitrum",
     symbol: "ETH",
     rank: 6,
@@ -174,8 +201,8 @@ const NetworkDetails: Record<SupportedNetworkName, NetworkInfo> = {
     cgId: "ethereum",
     decimals: 18,
     logoURI:
-      "https://tokens.1inch.io/0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee.png",
-    name: "Ethereum",
+      "https://assets.coingecko.com/coins/images/20582/large/aurora.jpeg",
+    name: "Aurora",
     signerType: [SignerType.secp256k1],
     type: NetworkType.EVM,
     rank: 15,
@@ -192,6 +219,76 @@ const NetworkDetails: Record<SupportedNetworkName, NetworkInfo> = {
     type: NetworkType.EVM,
     rank: 16,
     symbol: "ETH",
+  },
+  [SupportedNetworkName.Litecoin]: {
+    id: SupportedNetworkName.Litecoin,
+    decimals: 8,
+    logoURI: "https://assets.coingecko.com/coins/images/2/thumb/litecoin.png",
+    name: "Litecoin",
+    symbol: "LTC",
+    cgId: "litecoin",
+    rank: 17,
+    signerType: [SignerType.secp256k1btc],
+    type: NetworkType.Bitcoin,
+  },
+  [SupportedNetworkName.Dogecoin]: {
+    id: SupportedNetworkName.Dogecoin,
+    decimals: 8,
+    logoURI: "https://assets.coingecko.com/coins/images/5/thumb/dogecoin.png",
+    name: "Dogecoin",
+    symbol: "DOGE",
+    cgId: "dogecoin",
+    rank: 18,
+    signerType: [SignerType.secp256k1btc],
+    type: NetworkType.Bitcoin,
+  },
+  [SupportedNetworkName.Solana]: {
+    id: SupportedNetworkName.Solana,
+    decimals: 9,
+    logoURI:
+      "https://assets.coingecko.com/coins/images/4128/standard/solana.png",
+    name: "Solana",
+    symbol: "SOL",
+    cgId: "solana",
+    rank: 19,
+    signerType: [SignerType.ed25519sol],
+    type: NetworkType.Solana,
+  },
+  [SupportedNetworkName.Rootstock]: {
+    id: SupportedNetworkName.Rootstock,
+    decimals: 18,
+    logoURI:
+      "https://coin-images.coingecko.com/coins/images/5070/large/RBTC-logo.png?1718152038",
+    name: "Rootstock",
+    symbol: "RBTC",
+    cgId: "rootstock",
+    rank: 19,
+    signerType: [SignerType.secp256k1],
+    type: NetworkType.EVM,
+  },
+  [SupportedNetworkName.Blast]: {
+    id: SupportedNetworkName.Blast,
+    decimals: 18,
+    logoURI:
+      "https://assets.coingecko.com/coins/images/35494/standard/Blast.jpg",
+    name: "Blast",
+    symbol: "ETH",
+    cgId: "ethereum",
+    rank: 20,
+    signerType: [SignerType.secp256k1],
+    type: NetworkType.EVM,
+  },
+  [SupportedNetworkName.Telos]: {
+    id: SupportedNetworkName.Telos,
+    decimals: 18,
+    logoURI:
+      "https://assets.coingecko.com/coins/images/7588/standard/tlos_png.png",
+    name: "Telos",
+    symbol: "TLOS",
+    cgId: "telos",
+    rank: 21,
+    signerType: [SignerType.secp256k1],
+    type: NetworkType.EVM,
   },
 };
 export const isSupportedNetwork = (networkName: SupportedNetworkName) =>

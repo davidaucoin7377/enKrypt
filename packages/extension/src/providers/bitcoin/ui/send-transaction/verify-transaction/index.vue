@@ -30,7 +30,8 @@
             :address="txData.toAddress"
             :network="network"
           />
-          <verify-transaction-amount :token="txData.toToken" />
+          <verify-transaction-amount v-if="!isNft" :token="txData.toToken" />
+          <verify-transaction-nft v-if="isNft" :item="txData.NFTData!" />
           <verify-transaction-fee :fee="txData.gasFee" />
           {{ errorMsg }}
         </div>
@@ -60,10 +61,12 @@
 
     <send-process
       v-if="isProcessing"
+      :is-nft="isNft"
       :to-address="txData.toAddress"
       :network="network"
       :token="txData.toToken"
       :is-done="isSendDone"
+      :nft="txData.NFTData"
       :is-window-popup="isWindowPopup"
     />
   </div>
@@ -78,6 +81,7 @@ import VerifyTransactionNetwork from "@/providers/common/ui/verify-transaction/v
 import VerifyTransactionAccount from "@/providers/common/ui/verify-transaction/verify-transaction-account.vue";
 import VerifyTransactionAmount from "@/providers/common/ui/verify-transaction/verify-transaction-amount.vue";
 import VerifyTransactionFee from "@/providers/common/ui/verify-transaction/verify-transaction-fee.vue";
+import VerifyTransactionNft from "@/providers/common/ui/send-transaction/verify-transaction-nft.vue";
 import HardwareWalletMsg from "@/providers/common/ui/verify-transaction/hardware-wallet-msg.vue";
 import SendProcess from "@action/views/send-process/index.vue";
 import PublicKeyRing from "@/libs/keyring/public-keyring";
@@ -91,6 +95,8 @@ import { EnkryptAccount } from "@enkryptcom/types";
 import CustomScrollbar from "@action/components/custom-scrollbar/index.vue";
 import { BitcoinNetwork } from "@/providers/bitcoin/types/bitcoin-network";
 import BitcoinAPI from "@/providers/bitcoin/libs/api";
+import { trackSendEvents } from "@/libs/metrics";
+import { SendEventType } from "@/libs/metrics/types";
 
 const KeyRing = new PublicKeyRing();
 const route = useRoute();
@@ -99,6 +105,7 @@ const selectedNetwork: string = route.query.id as string;
 const txData: VerifyTransactionParams = JSON.parse(
   Buffer.from(route.query.txData as string, "base64").toString("utf8")
 );
+const isNft = ref(txData.isNFT);
 const isProcessing = ref(false);
 const network = ref<BitcoinNetwork>(DEFAULT_BTC_NETWORK);
 const isSendDone = ref(false);
@@ -110,6 +117,7 @@ const errorMsg = ref("");
 defineExpose({ verifyScrollRef });
 onBeforeMount(async () => {
   network.value = (await getNetworkByName(selectedNetwork)!) as BitcoinNetwork;
+  trackSendEvents(SendEventType.SendVerify, { network: network.value.name });
   account.value = await KeyRing.getAccount(txData.fromAddress);
   isWindowPopup.value = account.value.isHardware;
 });
@@ -123,6 +131,9 @@ const close = () => {
 
 const sendAction = async () => {
   isProcessing.value = true;
+  trackSendEvents(SendEventType.SendApprove, {
+    network: network.value.name,
+  });
   const txActivity: Activity = {
     from: network.value.displayAddress(txData.fromAddress),
     to: txData.toAddress,
@@ -131,14 +142,16 @@ const sendAction = async () => {
     status: ActivityStatus.pending,
     timestamp: new Date().getTime(),
     token: {
-      decimals: txData.toToken.decimals,
-      icon: txData.toToken.icon,
-      name: txData.toToken.name,
-      symbol: txData.toToken.symbol,
-      price: txData.toToken.price,
+      decimals: isNft.value ? 0 : txData.toToken.decimals,
+      icon: isNft.value ? txData.NFTData!.image : txData.toToken.icon,
+      name: isNft.value ? txData.NFTData!.name : txData.toToken.name,
+      symbol: isNft.value
+        ? txData.NFTData!.collectionName
+        : txData.toToken.symbol,
+      price: isNft.value ? "0" : txData.toToken.price,
     },
     type: ActivityType.transaction,
-    value: txData.toToken.amount,
+    value: isNft.value ? "1" : txData.toToken.amount,
     transactionHash: "",
   };
   const activityState = new ActivityState();
@@ -150,13 +163,16 @@ const sendAction = async () => {
   })
     .then((signedTx) => {
       api
-        .broadcastTx(signedTx.extractTransaction().toHex())
+        .broadcastTx(signedTx.toHex())
         .then(() => {
+          trackSendEvents(SendEventType.SendComplete, {
+            network: network.value.name,
+          });
           activityState.addActivities(
             [
               {
                 ...txActivity,
-                ...{ transactionHash: signedTx.extractTransaction().getId() },
+                ...{ transactionHash: signedTx.getId() },
               },
             ],
             {
@@ -178,6 +194,10 @@ const sendAction = async () => {
           }
         })
         .catch((error) => {
+          trackSendEvents(SendEventType.SendFailed, {
+            network: network.value.name,
+            error: error.message,
+          });
           txActivity.status = ActivityStatus.failed;
           activityState.addActivities([txActivity], {
             address: txData.fromAddress,

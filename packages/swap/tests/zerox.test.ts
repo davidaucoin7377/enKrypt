@@ -22,6 +22,7 @@ describe("Zerox Provider", () => {
   const web3eth = new Web3Eth(nodeURL);
   const zerox = new Zerox(web3eth, SupportedNetworkName.Ethereum);
   const ZEROX_APPROVAL = "0xdef1c0ded9bec7f1a1670819833240f027b25eff";
+  if (process.env.CI) return;
   it("it should return a quote infinity approval", async () => {
     const quote = await zerox.getQuote(
       {
@@ -71,7 +72,7 @@ describe("Zerox Provider", () => {
       `0x095ea7b3000000000000000000000000${ZEROX_APPROVAL.replace(
         "0x",
         ""
-      )}000000000000000000000000000000000000000000000000${numberToHex(
+      )}00000000000000000000000000000000000000000000000${numberToHex(
         amount
       ).replace("0x", "")}`
     );

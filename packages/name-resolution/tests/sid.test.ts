@@ -11,7 +11,7 @@ describe("SID Name resolving", () => {
       },
     });
     await resolver.init();
-    const address = await resolver.resolveAddress("spaceid.arb", "ARB1");
+    const address = await resolver.resolveAddress("spaceid.arb");
     expect(address).to.be.eq("0xb5932a6B7d50A966AEC6C74C97385412Fb497540");
   }).timeout(10000);
 
@@ -24,9 +24,9 @@ describe("SID Name resolving", () => {
     });
     await resolver.init();
     const name = await resolver.resolveReverseName(
-      "0xb5932a6b7d50a966aec6c74c97385412fb497540"
+      "0x1e3157ead0f498d814495d228f6ea4f041a3dc40"
     );
-    expect(name).to.be.eq("spaceid.bnb");
+    expect(name).to.be.eq("melissaa.bnb");
   }).timeout(10000);
 
   it("it should return null if not found", async () => {
@@ -41,7 +41,7 @@ describe("SID Name resolving", () => {
       "0xe5dc07bdcdb8c98850050c7f67de7e164b1ea392"
     );
     expect(name).to.be.eq(null);
-    const address = await resolver.resolveAddress("sdfsfsdfsdfsdf.bnb", "BNB");
+    const address = await resolver.resolveAddress("sdfsfsdfsdfsdf.bnb");
     expect(address).to.be.eq(null);
   }).timeout(10000);
 });

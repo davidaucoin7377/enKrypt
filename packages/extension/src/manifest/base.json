@@ -2,7 +2,7 @@
   "author": "https://www.enkrypt.com",
   "homepage_url": "https://www.enkrypt.com",
   "version": "",
-  "name": "Enkrypt: Multichain Crypto Wallet",
+  "name": "Enkrypt: ETH, BTC and Solana Wallet",
   "short_name": "Enkrypt",
   "permissions": [
     "storage",
@@ -24,12 +24,19 @@
   "content_scripts": [
     {
       "matches": ["file://*/*", "http://*/*", "https://*/*"],
+      "js": ["scripts/inject.js"],
+      "run_at": "document_start",
+      "all_frames": false,
+      "world": "MAIN"
+    },
+    {
+      "matches": ["file://*/*", "http://*/*", "https://*/*"],
       "js": ["scripts/contentscript.js"],
       "run_at": "document_start",
       "all_frames": false
     },
     {
-      "matches": ["*://connect.trezor.io/*/popup.html"],
+      "matches": ["*://connect.trezor.io/*/*"],
       "js": ["vendor/trezor-content-script.js"],
       "run_at": "document_start"
     }

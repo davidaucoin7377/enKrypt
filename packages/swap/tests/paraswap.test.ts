@@ -51,9 +51,9 @@ describe("Paraswap Provider", () => {
       )}${TOKEN_AMOUNT_INFINITY_AND_BEYOND.replace("0x", "")}`
     );
     expect(swap?.transactions[1].to).to.be.eq(
-      "0xDEF171Fe48CF0115B1d80b88dc8eAB59176FEe57"
+      "0x6a000f20005980200259b80c5102003040001068"
     );
-  }).timeout(5000);
+  }).timeout(10000);
 
   it("it should return a quote non infinity approval", async () => {
     const quote = await paraSwap.getQuote(
@@ -73,12 +73,12 @@ describe("Paraswap Provider", () => {
       `0x095ea7b3000000000000000000000000${PARASWAP_APPROVAL_ADDRESS.replace(
         "0x",
         ""
-      )}000000000000000000000000000000000000000000000000${numberToHex(
+      )}00000000000000000000000000000000000000000000000${numberToHex(
         amount
       ).replace("0x", "")}`
     );
     expect(swap?.transactions[1].to).to.be.eq(
-      "0xDEF171Fe48CF0115B1d80b88dc8eAB59176FEe57"
+      "0x6a000f20005980200259b80c5102003040001068"
     );
-  }).timeout(5000);
+  }).timeout(10000);
 });

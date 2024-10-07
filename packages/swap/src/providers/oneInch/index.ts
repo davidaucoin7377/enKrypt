@@ -1,5 +1,6 @@
 import type Web3Eth from "web3-eth";
 import { numberToHex, toBN } from "web3-utils";
+import fetch from "node-fetch";
 import {
   EVMTransaction,
   getQuoteOptions,
@@ -30,11 +31,11 @@ import {
   getAllowanceTransactions,
   TOKEN_AMOUNT_INFINITY_AND_BEYOND,
 } from "../../utils/approvals";
-import estimateGasList from "../../common/estimateGasList";
+import estimateEVMGasList from "../../common/estimateGasList";
 import { isEVMAddress } from "../../utils/common";
 
 export const ONEINCH_APPROVAL_ADDRESS =
-  "0x1111111254eeb25477b68fb85ed929f73a960582";
+  "0x111111125421ca6dc452d289314280a0f8842a65";
 const supportedNetworks: {
   [key in SupportedNetworkName]?: { approvalAddress: string; chainId: string };
 } = {
@@ -78,13 +79,17 @@ const supportedNetworks: {
     approvalAddress: ONEINCH_APPROVAL_ADDRESS,
     chainId: "42161",
   },
+  [SupportedNetworkName.Base]: {
+    approvalAddress: ONEINCH_APPROVAL_ADDRESS,
+    chainId: "8453",
+  },
   [SupportedNetworkName.Zksync]: {
-    approvalAddress: "0x6e2b76966cbd9cf4cc2fa0d76d24d5241e0abc2f",
+    approvalAddress: "0x6fd4383cb451173d5f9304f041c7bcbf27d561ff",
     chainId: "324",
   },
 };
 
-const BASE_URL = "https://partners.mewapi.io/oneinch/v5.2/";
+const BASE_URL = "https://partners.mewapi.io/oneinch/v6.0/";
 
 class OneInch extends ProviderClass {
   tokenList: TokenType[];
@@ -100,7 +105,7 @@ class OneInch extends ProviderClass {
   toTokens: ProviderToTokenResponse;
 
   constructor(web3eth: Web3Eth, network: SupportedNetworkName) {
-    super(web3eth, network);
+    super();
     this.network = network;
     this.tokenList = [];
     this.web3eth = web3eth;
@@ -179,13 +184,21 @@ class OneInch extends ProviderClass {
     )
       .then((res) => res.json())
       .then(async (response: OneInchResponseType) => {
+        // OneInch gives us the swap transaction info for us to send
+        // but we might need to set approvals first so our spender address
+        // can perform the swap
+
         if (response.error) {
           console.error(response.error, response.description);
           return Promise.resolve(null);
         }
+
+        /** Transactions to perform in-order for the swap */
         const transactions: EVMTransaction[] = [];
 
         if (options.fromToken.address !== NATIVE_TOKEN_ADDRESS) {
+          // Prepare to grant our `approvalAddress` approval to spend
+          // `fromToken` on behalf of `fromAddress`
           const approvalTxs = await getAllowanceTransactions({
             infinityApproval: meta.infiniteApproval,
             spender: supportedNetworks[this.network].approvalAddress,
@@ -196,6 +209,8 @@ class OneInch extends ProviderClass {
           });
           transactions.push(...approvalTxs);
         }
+
+        // Prepare the actual swap transaction
         transactions.push({
           from: options.fromAddress,
           gasLimit: GAS_LIMITS.swap,
@@ -204,8 +219,9 @@ class OneInch extends ProviderClass {
           data: response.tx.data,
           type: TransactionType.evm,
         });
+
         if (accurateEstimate) {
-          const accurateGasEstimate = await estimateGasList(
+          const accurateGasEstimate = await estimateEVMGasList(
             transactions,
             this.network
           );
@@ -218,7 +234,7 @@ class OneInch extends ProviderClass {
         }
         return {
           transactions,
-          toTokenAmount: toBN(response.toAmount),
+          toTokenAmount: toBN(response.dstAmount),
           fromTokenAmount: options.amount,
         };
       })
@@ -237,6 +253,7 @@ class OneInch extends ProviderClass {
       const response: ProviderQuoteResponse = {
         fromTokenAmount: res.fromTokenAmount,
         toTokenAmount: res.toTokenAmount,
+        additionalNativeFees: toBN(0),
         provider: this.name,
         quote: {
           meta,
@@ -264,6 +281,7 @@ class OneInch extends ProviderClass {
         provider: this.name,
         toTokenAmount: res.toTokenAmount,
         transactions: res.transactions,
+        additionalNativeFees: toBN(0),
         slippage: quote.meta.slippage || DEFAULT_SLIPPAGE,
         fee: feeConfig * 100,
         getStatusObject: async (

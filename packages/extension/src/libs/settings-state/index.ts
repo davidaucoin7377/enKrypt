@@ -1,3 +1,4 @@
+import Browser from "webextension-polyfill";
 import { InternalStorageNamespace } from "@/types/provider";
 import BrowserStorage from "@/libs/common/browser-storage";
 import {
@@ -5,8 +6,11 @@ import {
   EVMSettingsType,
   SubstrateSettingsType,
   SettingsType,
+  BtcSettingsType,
+  EnkryptSettingsType,
 } from "./types";
 import { merge } from "lodash";
+
 class SettingsState {
   #storage: BrowserStorage;
   constructor() {
@@ -29,7 +33,23 @@ class SettingsState {
   async getSubstrateSettings(): Promise<SubstrateSettingsType> {
     const state = await this.getStateByKey(StorageKeys.substrateState);
     const settings: SubstrateSettingsType = {
-      injectPolkadotjs: true,
+      injectPolkadotjs: false,
+    };
+    return merge(settings, state);
+  }
+  async getBtcSettings(): Promise<BtcSettingsType> {
+    const state = await this.getStateByKey(StorageKeys.btcState);
+    const settings: BtcSettingsType = {
+      injectUnisat: false,
+    };
+    return merge(settings, state);
+  }
+  async getEnkryptSettings(): Promise<EnkryptSettingsType> {
+    const state = await this.getStateByKey(StorageKeys.enkryptState);
+    const settings: EnkryptSettingsType = {
+      installedTimestamp: 0,
+      randomUserID: "",
+      isMetricsEnabled: true,
     };
     return merge(settings, state);
   }
@@ -42,15 +62,26 @@ class SettingsState {
   async setEVMSettings(state: EVMSettingsType): Promise<void> {
     await this.#storage.set(StorageKeys.evmState, state);
   }
+  async setEnkryptSettings(state: EnkryptSettingsType): Promise<void> {
+    await this.#storage.set(StorageKeys.enkryptState, state);
+  }
   async setSubstrateSettings(state: SubstrateSettingsType): Promise<void> {
     await this.#storage.set(StorageKeys.substrateState, state);
+  }
+  async setBtcSettings(state: BtcSettingsType): Promise<void> {
+    await this.#storage.set(StorageKeys.btcState, state);
   }
   async getAllSettings(): Promise<SettingsType> {
     const evmstate = await this.getEVMSettings();
     const substratestate = await this.getSubstrateSettings();
+    const btcstate = await this.getBtcSettings();
+    const enkryptState = await this.getEnkryptSettings();
     return {
       evm: evmstate,
       substrate: substratestate,
+      btc: btcstate,
+      enkrypt: enkryptState,
+      manifestVersion: Browser.runtime.getManifest().manifest_version,
     };
   }
   async getStateByKey(key: string): Promise<any> {

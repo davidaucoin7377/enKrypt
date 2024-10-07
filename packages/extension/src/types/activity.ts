@@ -5,18 +5,30 @@ import {
   TokenTypeTo,
   StatusOptionsResponse,
 } from "@enkryptcom/swap";
+import { ICommandResult } from "@kadena/client";
 
-interface BTCInOuts {
+interface BTCIns {
   address: string;
   value: number;
+}
+
+interface BTCOuts extends BTCIns {
+  pkscript: string;
+}
+
+interface SOLRawInfo {
+  blockNumber: number;
+  transactionHash: string;
+  timestamp: number | null | undefined;
+  status: boolean;
 }
 
 interface BTCRawInfo {
   blockNumber: number;
   transactionHash: string;
   timestamp: number | undefined;
-  inputs: BTCInOuts[];
-  outputs: BTCInOuts[];
+  inputs: BTCIns[];
+  outputs: BTCOuts[];
   fee: number;
 }
 
@@ -62,6 +74,23 @@ interface SubstrateRawInfo {
   asset_type: string;
 }
 
+type KadenaRawInfo = ICommandResult;
+
+interface KadenaDBInfo {
+  amount: string;
+  blockHash: string;
+  blockTime: string;
+  chain: number;
+  crossChainAccount: string | null;
+  crossChainId: number | null;
+  fromAccount: string;
+  height: number;
+  idx: number;
+  requestKey: string;
+  toAccount: string;
+  token: string;
+}
+
 enum ActivityStatus {
   pending = "pending",
   success = "success",
@@ -81,6 +110,8 @@ interface Activity {
   network: NetworkNames;
   from: string;
   to: string;
+  chainId?: string;
+  crossChainId?: number;
   value: string;
   timestamp: number;
   nonce?: string;
@@ -94,7 +125,9 @@ interface Activity {
     | SubstrateRawInfo
     | SubscanExtrinsicInfo
     | BTCRawInfo
-    | SwapRawInfo;
+    | SwapRawInfo
+    | KadenaRawInfo
+    | SOLRawInfo;
 }
 
 export {
@@ -106,4 +139,7 @@ export {
   SubscanExtrinsicInfo,
   BTCRawInfo,
   SwapRawInfo,
+  KadenaRawInfo,
+  KadenaDBInfo,
+  SOLRawInfo,
 };

@@ -2,9 +2,10 @@
   <div class="container">
     <div v-if="!!selected" class="send-transaction">
       <send-header
-        :close="close"
-        :toggle-type="toggleSelector"
         :is-send-token="isSendToken"
+        :is-nft-available="!!network.NFTHandler"
+        @close="close"
+        @toggle-type="toggleSelector"
       />
 
       <send-address-input
@@ -45,17 +46,32 @@
         @close="toggleSelectContactTo"
       />
 
-      <send-token-select :token="selectedAsset" />
+      <send-token-select v-if="isSendToken" :token="selectedAsset" />
+
+      <send-nft-select
+        v-if="!isSendToken"
+        :item="selectedNft"
+        :is-sending-disabled="false"
+        @toggle-select="toggleSelectNft"
+      />
+
+      <nft-select-list
+        v-show="isOpenSelectNft"
+        :address="addressFrom"
+        :network="network"
+        :selected-nft="paramNFTData"
+        @close="toggleSelectNft"
+        @select-nft="selectNFT"
+      />
 
       <send-input-amount
         v-if="isSendToken"
         :amount="amount"
         :fiat-value="selectedAsset.price"
-        :has-enough-balance="hasEnoughBalance"
+        :has-enough-balance="!nativeBalanceAfterTransaction.isNeg()"
         @update:input-amount="inputAmount"
         @update:input-set-max="setMaxValue"
       />
-
       <send-fee-select
         :in-swap="false"
         :selected="selectedFee"
@@ -73,7 +89,7 @@
       />
 
       <send-alert
-        v-show="hasEnoughBalance && nativeBalanceAfterTransaction.isNeg()"
+        v-show="nativeBalanceAfterTransaction.isNeg() || (Number(sendAmount) < (props.network as BitcoinNetwork).dust && Number(sendAmount)>0)"
         :native-symbol="network.name"
         :price="selectedAsset.price || '0'"
         :native-value="
@@ -83,6 +99,9 @@
           )
         "
         :decimals="network.decimals"
+        :below-dust="Number(sendAmount) < (props.network as BitcoinNetwork).dust"
+        :dust="(props.network as BitcoinNetwork).dust.toString()"
+        :not-enough="nativeBalanceAfterTransaction.isNeg()"
       />
 
       <div class="send-transaction__buttons">
@@ -104,20 +123,22 @@
 <script setup lang="ts">
 import { ref, onMounted, PropType, computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import SendHeader from "./components/send-header.vue";
+import SendHeader from "@/providers/common/ui/send-transaction/send-header.vue";
 import SendAddressInput from "./components/send-address-input.vue";
 import SendFromContactsList from "@/providers/common/ui/send-transaction/send-from-contacts-list.vue";
 import SendContactsList from "@/providers/common/ui/send-transaction/send-contacts-list.vue";
 import SendTokenSelect from "./components/send-token-select.vue";
-import SendAlert from "@/providers/common/ui/send-transaction/send-alert.vue";
+import SendAlert from "@/providers/bitcoin/ui/send-transaction/components/send-alert.vue";
 import SendInputAmount from "@/providers/common/ui/send-transaction/send-input-amount.vue";
 import SendFeeSelect from "@/providers/common/ui/send-transaction/send-fee-select.vue";
 import TransactionFeeView from "@action/views/transaction-fee/index.vue";
 import BaseButton from "@action/components/base-button/index.vue";
+import SendNftSelect from "@/providers/common/ui/send-transaction/send-nft-select.vue";
+import NftSelectList from "@/providers/common/ui/send-transaction/nft-select-list/index.vue";
 import { AccountsHeaderData } from "@action/types/account";
 import { toBN } from "web3-utils";
 import { GasPriceTypes, GasFeeType } from "@/providers/common/types";
-import { BitcoinNetwork } from "../../types/bitcoin-network";
+import { BitcoinNetwork } from "@/providers/bitcoin/types/bitcoin-network";
 import { BTCToken } from "../../types/btc-token";
 import BigNumber from "bignumber.js";
 import { defaultGasCostVals } from "@/providers/common/libs/default-vals";
@@ -128,17 +149,20 @@ import getUiPath from "@/libs/utils/get-ui-path";
 import Browser from "webextension-polyfill";
 import { ProviderName } from "@/types/provider";
 import PublicKeyRing from "@/libs/keyring/public-keyring";
-import { BaseNetwork } from "@/types/base-network";
 
 import { getGasCostValues, isAddress } from "../../libs/utils";
 import BitcoinAPI from "@/providers/bitcoin/libs/api";
-import { calculateSize } from "../libs/tx-size";
+import { calculateSizeBasedOnType } from "../libs/tx-size";
 import { HaskoinUnspentType } from "../../types";
-import { VerifyTransactionParams, BTCTxInfo } from "../types";
+import { VerifyTransactionParams } from "../types";
+import { getTxInfo as getBTCTxInfo } from "@/providers/bitcoin/libs/utils";
+import { NFTItem, NFTItemWithCollectionName, NFTType } from "@/types/nft";
+import { trackSendEvents } from "@/libs/metrics";
+import { SendEventType } from "@/libs/metrics/types";
 
 const props = defineProps({
   network: {
-    type: Object as PropType<BaseNetwork>,
+    type: Object as PropType<BitcoinNetwork>,
     default: () => ({}),
   },
   accountInfo: {
@@ -159,25 +183,14 @@ const addressInputTo = ref();
 const route = useRoute();
 const router = useRouter();
 const selected: string = route.params.id as string;
+const paramNFTData: NFTItem = JSON.parse(
+  route.params.tokenData ? (route.params.tokenData as string) : "{}"
+) as NFTItem;
+const isSendToken = ref<boolean>(JSON.parse(route.params.isToken as string));
 const selectedAsset = ref<BTCToken>(loadingAsset);
 const amount = ref<string>("");
 const accountUTXOs = ref<HaskoinUnspentType[]>([]);
-
-const hasEnoughBalance = computed(() => {
-  if (!isValidDecimals(sendAmount.value, selectedAsset.value.decimals!)) {
-    return false;
-  }
-  return toBN(selectedAsset.value.balance ?? "0").gte(
-    toBN(toBase(sendAmount.value ?? "0", selectedAsset.value.decimals!)).add(
-      toBN(
-        toBase(
-          gasCostValues.value[selectedFee.value].nativeValue,
-          selectedAsset.value.decimals!
-        )
-      )
-    )
-  );
-});
+const isOpenSelectNft = ref(false);
 
 const sendAmount = computed(() => {
   if (amount.value && amount.value !== "") return amount.value;
@@ -193,27 +206,26 @@ const addressFrom = ref<string>(
 const addressTo = ref<string>("");
 const isLoadingAssets = ref(true);
 
-const nativeBalance = computed(() => {
-  const accountIndex = props.accountInfo.activeAccounts.findIndex(
-    (acc) => acc.address === addressFrom.value
-  );
-  if (accountIndex !== -1) {
-    const balance = props.accountInfo.activeBalances[accountIndex];
-    if (balance !== "~") {
-      return toBase(balance, props.network.decimals);
-    }
-  }
-  return "0";
-});
-
 onMounted(async () => {
+  trackSendEvents(SendEventType.SendOpen, { network: props.network.name });
   fetchAssets().then(setBaseCosts);
 });
 
 const nativeBalanceAfterTransaction = computed(() => {
-  if (nativeBalance.value && amount.value !== "") {
-    const rawAmount = toBN(toBase(amount.value, selectedAsset.value.decimals!));
-    return toBN(nativeBalance.value).sub(rawAmount);
+  if (
+    selectedAsset.value &&
+    isValidDecimals(sendAmount.value, selectedAsset.value.decimals!)
+  ) {
+    return UTXOBalance.value.sub(
+      toBN(toBase(sendAmount.value ?? "0", selectedAsset.value.decimals!)).add(
+        toBN(
+          toBase(
+            gasCostValues.value[selectedFee.value].nativeValue,
+            selectedAsset.value.decimals!
+          )
+        )
+      )
+    );
   }
   return toBN(0);
 });
@@ -239,15 +251,12 @@ const updateUTXOs = async () => {
   const api = (await props.network.api()) as BitcoinAPI;
   return api.getUTXOs(addressFrom.value).then((utxos) => {
     accountUTXOs.value = utxos;
-    const txSize = calculateSize(
-      {
-        input_count: accountUTXOs.value.length,
-      },
-      {
-        p2wpkh_output_count: 2,
-      }
+    const txSize = calculateSizeBasedOnType(
+      accountUTXOs.value.length + (isSendToken.value ? 0 : 1),
+      2,
+      (props.network as BitcoinNetwork).networkInfo.paymentType
     );
-    setTransactionFees(Math.ceil(txSize.txVBytes));
+    setTransactionFees(Math.ceil(txSize));
   });
 };
 
@@ -276,9 +285,20 @@ const isInputsValid = computed<boolean>(() => {
     !isAddress(addressTo.value, (props.network as BitcoinNetwork).networkInfo)
   )
     return false;
-  if (!isValidDecimals(sendAmount.value, selectedAsset.value.decimals!)) {
+  if (
+    isSendToken.value &&
+    !isValidDecimals(sendAmount.value, selectedAsset.value.decimals!)
+  ) {
     return false;
   }
+  if (!isSendToken.value && !selectedNft.value.id) {
+    return false;
+  }
+  if (
+    Number(sendAmount.value) < (props.network as BitcoinNetwork).dust &&
+    isSendToken.value
+  )
+    return false;
   if (new BigNumber(sendAmount.value).gt(assetMaxValue.value)) return false;
   return true;
 });
@@ -293,15 +313,31 @@ const isOpenSelectContactFrom = ref<boolean>(false);
 const isOpenSelectContactTo = ref<boolean>(false);
 
 const isOpenSelectFee = ref<boolean>(false);
-const isSendToken = ref(true);
+
+const selectedNft = ref<NFTItemWithCollectionName>({
+  id: "",
+  contract: "",
+  image: "",
+  name: "Loading",
+  url: "",
+  collectionName: "",
+  type: NFTType.Ordinals,
+});
 
 const close = () => {
+  trackSendEvents(SendEventType.SendDecline, {
+    network: props.network.name,
+  });
   router.go(-1);
 };
 
+const UTXOBalance = computed(() => {
+  return toBN(accountUTXOs.value.reduce((a, c) => a + c.value, 0));
+});
+
 const assetMaxValue = computed(() => {
   return fromBase(
-    toBN(selectedAsset.value.balance!)
+    UTXOBalance.value
       .sub(
         toBN(
           toBase(
@@ -353,7 +389,7 @@ const inputAmount = (inputAmount: string) => {
   }
   const inputAmountBn = new BigNumber(inputAmount);
   isMaxSelected.value = false;
-  amount.value = inputAmountBn.lt(0) ? "0" : inputAmountBn.toFixed();
+  amount.value = inputAmountBn.lt(0) ? "0" : inputAmount;
 };
 
 const toggleSelectFee = () => {
@@ -366,38 +402,54 @@ const selectFee = (type: GasPriceTypes) => {
   if (isMaxSelected.value) setMaxValue();
 };
 
+const toggleSelectNft = (open: boolean) => {
+  isOpenSelectNft.value = open;
+};
+
+const selectNFT = (item: NFTItemWithCollectionName) => {
+  selectedNft.value = item;
+  isOpenSelectNft.value = false;
+};
+
 const sendAction = async () => {
   const keyring = new PublicKeyRing();
   const fromAccountInfo = await keyring.getAccount(addressFrom.value);
-  const txInfo: BTCTxInfo = {
-    inputs: [],
-    outputs: [],
-  };
-  accountUTXOs.value.forEach((u) => {
-    txInfo.inputs.push({
-      hash: u.txid,
-      index: u.index,
-      witnessUtxo: {
-        script: u.pkscript,
-        value: u.value,
-      },
-    });
-  });
-  const balance = toBN(selectedAsset.value.balance!);
-  const toAmount = toBN(toBase(amount.value, selectedAsset.value.decimals));
   const currentFee = toBN(
     toBase(
       gasCostValues.value[selectedFee.value].nativeValue,
       selectedAsset.value.decimals
     )
   );
-  const remainder = balance.sub(toAmount).sub(currentFee);
-
-  txInfo.outputs.push({
-    address: addressTo.value,
-    value: toAmount.toNumber(),
-  });
-
+  let txInfo = getBTCTxInfo(accountUTXOs.value);
+  let toAmount = toBN(toBase(sendAmount.value, selectedAsset.value.decimals));
+  if (isSendToken.value) {
+    txInfo.outputs.push({
+      address: addressTo.value,
+      value: toAmount.toNumber(),
+    });
+  } else {
+    const api = (await props.network.api()) as BitcoinAPI;
+    const [txid, index] = selectedNft.value.id.split(":");
+    const ordinalTx = await api.getTransactionStatus(txid);
+    const ordinalOutput = ordinalTx!.outputs[parseInt(index)];
+    txInfo = getBTCTxInfo(accountUTXOs.value, {
+      address: ordinalOutput.address,
+      block: {
+        height: ordinalTx!.blockNumber,
+        position: -1, // not needed
+      },
+      index: parseInt(index),
+      pkscript: ordinalOutput.pkscript,
+      txid,
+      value: ordinalOutput.value,
+    });
+    toAmount = toBN(ordinalOutput.value);
+    txInfo.outputs.push({
+      address: addressTo.value,
+      value: ordinalOutput.value,
+    });
+  }
+  const remainder = UTXOBalance.value.sub(toAmount).sub(currentFee);
   if (remainder.gtn(0)) {
     txInfo.outputs.push({
       address: props.network.displayAddress(addressFrom.value),
@@ -407,6 +459,8 @@ const sendAction = async () => {
 
   const txVerifyInfo: VerifyTransactionParams = {
     TxInfo: JSON.stringify(txInfo),
+    isNFT: !isSendToken.value,
+    NFTData: !isSendToken.value ? selectedNft.value : undefined,
     toToken: {
       amount: toAmount.toString(),
       decimals: selectedAsset.value.decimals!,
@@ -439,8 +493,8 @@ const sendAction = async () => {
     await Browser.windows.create({
       url: Browser.runtime.getURL(
         getUiPath(
-          `eth-hw-verify?id=${routedRoute.query.id}&txData=${routedRoute.query.txData}`,
-          ProviderName.ethereum
+          `btc-hw-verify?id=${routedRoute.query.id}&txData=${routedRoute.query.txData}`,
+          ProviderName.bitcoin
         )
       ),
       type: "popup",
@@ -448,6 +502,7 @@ const sendAction = async () => {
       height: 600,
       width: 460,
     });
+    window.close();
   } else {
     router.push(routedRoute);
   }
@@ -498,5 +553,13 @@ const toggleSelector = (isTokenSend: boolean) => {
       width: 218px;
     }
   }
+}
+p {
+  font-weight: 400;
+  font-size: 14px;
+  line-height: 20px;
+  letter-spacing: 0.25px;
+  color: @error;
+  margin: 0;
 }
 </style>

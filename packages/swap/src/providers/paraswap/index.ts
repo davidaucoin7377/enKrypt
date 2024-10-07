@@ -1,5 +1,6 @@
 import type Web3Eth from "web3-eth";
 import { numberToHex, toBN } from "web3-utils";
+import fetch from "node-fetch";
 import {
   EVMTransaction,
   getQuoteOptions,
@@ -34,11 +35,11 @@ import {
   getAllowanceTransactions,
   TOKEN_AMOUNT_INFINITY_AND_BEYOND,
 } from "../../utils/approvals";
-import estimateGasList from "../../common/estimateGasList";
+import estimateEVMGasList from "../../common/estimateGasList";
 import { isEVMAddress } from "../../utils/common";
 
 export const PARASWAP_APPROVAL_ADDRESS =
-  "0x216b4b4ba9f3e719726886d34a177484278bfcae";
+  "0x6a000f20005980200259b80c5102003040001068";
 
 const supportedNetworks: {
   [key in SupportedNetworkName]?: { approvalAddress: string; chainId: string };
@@ -67,6 +68,14 @@ const supportedNetworks: {
     approvalAddress: PARASWAP_APPROVAL_ADDRESS,
     chainId: "42161",
   },
+  [SupportedNetworkName.Base]: {
+    approvalAddress: PARASWAP_APPROVAL_ADDRESS,
+    chainId: "8453",
+  },
+  [SupportedNetworkName.MaticZK]: {
+    approvalAddress: PARASWAP_APPROVAL_ADDRESS,
+    chainId: "1101",
+  },
 };
 
 const BASE_URL = "https://apiv5.paraswap.io/";
@@ -85,7 +94,7 @@ class ParaSwap extends ProviderClass {
   toTokens: ProviderToTokenResponse;
 
   constructor(web3eth: Web3Eth, network: SupportedNetworkName) {
-    super(web3eth, network);
+    super();
     this.network = network;
     this.tokenList = [];
     this.web3eth = web3eth;
@@ -172,6 +181,7 @@ class ParaSwap extends ProviderClass {
       partnerFeeBps: feeConfig
         ? parseInt((feeConfig.fee * 10000).toString(), 10).toString()
         : "0",
+      isDirectFeeTransfer: true,
     });
     return fetch(
       `${BASE_URL}transactions/${
@@ -214,7 +224,7 @@ class ParaSwap extends ProviderClass {
           type: TransactionType.evm,
         });
         if (accurateEstimate) {
-          const accurateGasEstimate = await estimateGasList(
+          const accurateGasEstimate = await estimateEVMGasList(
             transactions,
             this.network
           );
@@ -260,10 +270,12 @@ class ParaSwap extends ProviderClass {
       destDecimals: options.toToken.decimals.toString(),
       amount: options.amount.toString(),
       side: "SELL",
+      excludeDEXS: "ParaSwapPool,ParaSwapLimitOrders",
       network: supportedNetworks[this.network].chainId,
       userAddress: options.fromAddress,
       receiver: options.toAddress,
       partnerAddress: feeConfig ? feeConfig.referrer : "",
+      version: "6.2",
       partnerFeeBps: feeConfig
         ? parseInt((feeConfig.fee * 10000).toString(), 10).toString()
         : "0",
@@ -288,6 +300,7 @@ class ParaSwap extends ProviderClass {
         const response: ProviderQuoteResponse = {
           fromTokenAmount: toBN(res.srcAmount),
           toTokenAmount: toBN(res.destAmount),
+          additionalNativeFees: toBN(0),
           provider: this.name,
           quote: {
             meta: {
@@ -322,6 +335,7 @@ class ParaSwap extends ProviderClass {
         fromTokenAmount: res.fromTokenAmount,
         provider: this.name,
         toTokenAmount: res.toTokenAmount,
+        additionalNativeFees: toBN(0),
         transactions: res.transactions,
         slippage: quote.meta.slippage || DEFAULT_SLIPPAGE,
         fee: feeConfig * 100,

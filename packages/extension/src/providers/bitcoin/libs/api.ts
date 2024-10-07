@@ -1,15 +1,16 @@
 import { BTCRawInfo } from "@/types/activity";
 import { ProviderAPIInterface } from "@/types/provider";
-import { hexToBuffer } from "@enkryptcom/utils";
 import {
   BitcoinNetworkInfo,
   HaskoinBalanceType,
   HaskoinTxType,
   HaskoinUnspentType,
 } from "../types";
-import { payments } from "bitcoinjs-lib";
 import { toBN } from "web3-utils";
+import { getAddress as getBitcoinAddress } from "../types/bitcoin-network";
+import { filterOutOrdinals } from "./filter-ordinals";
 
+/** Bitcoin API wrapper */
 class API implements ProviderAPIInterface {
   node: string;
   networkInfo: BitcoinNetworkInfo;
@@ -23,14 +24,19 @@ class API implements ProviderAPIInterface {
     return this;
   }
   private getAddress(pubkey: string) {
-    const { address } = payments.p2wpkh({
-      pubkey: hexToBuffer(pubkey),
-      network: this.networkInfo,
-    });
-    return address as string;
+    return getBitcoinAddress(pubkey, this.networkInfo);
   }
   // eslint-disable-next-line @typescript-eslint/no-empty-function
   async init(): Promise<void> {}
+  async getRawTransaction(hash: string): Promise<string | null> {
+    return fetch(`${this.node}transaction/${hash}/raw`)
+      .then((res) => res.json())
+      .then((tx: { result: string; error: unknown }) => {
+        if ((tx as any).error) return null;
+        if (!tx.result) return null;
+        return `0x${tx.result}`;
+      });
+  }
   async getTransactionStatus(hash: string): Promise<BTCRawInfo | null> {
     return fetch(`${this.node}transaction/${hash}`)
       .then((res) => res.json())
@@ -47,6 +53,7 @@ class API implements ProviderAPIInterface {
           outputs: tx.outputs.map((output) => ({
             address: output.address,
             value: output.value,
+            pkscript: output.pkscript,
           })),
           transactionHash: tx.txid,
           timestamp: tx.time * 1000,
@@ -61,7 +68,8 @@ class API implements ProviderAPIInterface {
       .then((balance: HaskoinBalanceType) => {
         if ((balance as any).error) return "0";
         return toBN(balance.confirmed).addn(balance.unconfirmed).toString();
-      });
+      })
+      .catch(() => "0");
   }
   async broadcastTx(rawtx: string): Promise<boolean> {
     return fetch(`${this.node}transactions`, {
@@ -87,10 +95,18 @@ class API implements ProviderAPIInterface {
       .then((res) => res.json())
       .then((utxos: HaskoinUnspentType[]) => {
         if ((utxos as any).error) return [];
-        utxos.sort((a, b) => {
-          return a.value - b.value;
-        });
-        return utxos;
+        return filterOutOrdinals(address, this.networkInfo.name, utxos).then(
+          (futxos) => {
+            futxos.sort((a, b) => {
+              return a.value - b.value;
+            });
+            return futxos;
+          }
+        );
+      })
+      .catch((e) => {
+        console.error(e);
+        return [];
       });
   }
 }
