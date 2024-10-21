@@ -20,9 +20,9 @@
     "@enkryptcom/signer-bitcoin": "workspace:^",
     "@enkryptcom/signer-ethereum": "workspace:^",
     "@enkryptcom/signer-polkadot": "workspace:^",
-    "@enkryptcom/storage": "workspace:^",
+    "@enkryptcom/storage": "0.0.3",
     "@enkryptcom/types": "workspace:^",
-    "@enkryptcom/utils": "workspace:^",
+    "@enkryptcom/utils": "0.0.4",
     "@polkadot/util": "^12.3.2",
     "assert": "^2.0.0",
     "bip39": "^3.1.0"
