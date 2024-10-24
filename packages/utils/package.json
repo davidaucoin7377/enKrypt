@@ -23,7 +23,7 @@
     "bip39": "^3.1.0",
     "chai": "^4.3.7",
     "ethereum-cryptography": "^1.2.0",
-    "web3-utils": "^1.10.0"
+    "web3-utils": "^1.10.1"
   },
   "devDependencies": {
     "@types/chai": "^4.3.5",
