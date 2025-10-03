@@ -1,4 +1,4 @@
-FROM node:22.18-bookworm
+FROM node:22.20.0-bookworm
 RUN apt-get update
 RUN apt-get install build-essential zip -y
 ENV HOME /home
