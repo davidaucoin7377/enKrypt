@@ -22,7 +22,7 @@
     "node": ">=14.15.0"
   },
   "dependencies": {
-    "@enkryptcom/utils": "workspace:^",
+    "@enkryptcom/utils": "0.0.3",
     "@ethereumjs/util": "^9.1.0",
     "bip39": "^3.1.0",
     "hdkey": "^2.1.0",
