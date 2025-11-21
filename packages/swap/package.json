@@ -24,8 +24,8 @@
   "dependencies": {
     "@1inch/fusion-sdk": "^2.3.8",
     "@1inch/limit-order-sdk": "^5.0.4",
-    "@enkryptcom/types": "workspace:^",
-    "@enkryptcom/utils": "workspace:^",
+    "@enkryptcom/types": "0.0.1",
+    "@enkryptcom/utils": "0.0.3",
     "@solana/spl-token": "^0.4.14",
     "@solana/web3.js": "^1.98.4",
     "bignumber.js": "^9.3.1",
@@ -36,7 +36,7 @@
     "rango-sdk-basic": "^0.1.71",
     "reconnecting-websocket": "^4.4.0",
     "uuid": "^13.0.0",
-    "web3-eth": "^1.10.4",
+    "web3-eth": "^4.0.1",
     "web3-utils": "^1.10.4",
     "ws": "^8.18.3"
   },
