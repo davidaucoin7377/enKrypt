@@ -23,7 +23,7 @@
   },
   "dependencies": {
     "@commitlint/cli": "^20.4.1",
-    "@enkryptcom/utils": "workspace:^",
+    "@enkryptcom/utils": "0.0.3",
     "@polkadot/util": "^14.0.1",
     "@polkadot/util-crypto": "^14.0.1",
     "@polkadot/wasm-crypto": "^7.5.4",
