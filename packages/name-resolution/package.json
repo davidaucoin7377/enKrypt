@@ -52,6 +52,6 @@
     "@ensdomains/address-encoder": "^1.1.4",
     "@unstoppabledomains/resolution": "^9.3.3",
     "@web3-name-sdk/core": "0.4.2",
-    "ethers": "^5.8.0"
+    "ethers": "^6.0.0"
   }
 }
